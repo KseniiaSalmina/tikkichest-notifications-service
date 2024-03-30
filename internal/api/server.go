@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"log"
 	"net/http"
 	"time"
@@ -29,6 +30,9 @@ func NewServer(cfg config.Server, storage Storage) *Server {
 	router.POST("/notifications/:id", s.notificationsOn)
 	router.DELETE("/notifications/:id", s.notificationsOff)
 	router.PATCH("/notifications/:id", s.changeUsername)
+
+	swagHandler := httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json"))
+	router.GET("/swagger/*path", swagHandler)
 
 	s.httpServer = &http.Server{
 		Addr:         cfg.Listen,

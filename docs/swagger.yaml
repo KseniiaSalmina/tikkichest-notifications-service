@@ -1,0 +1,93 @@
+basePath: /
+definitions:
+  models.User:
+    properties:
+      id:
+        type: integer
+      telegram_username:
+        description: Telegram username
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: part of tikkichest
+  title: Tikkichest notifications service
+  version: 1.0.0
+paths:
+  /notifications/{userID}:
+    delete:
+      consumes:
+      - application/json
+      description: turn off notifications for selected user
+      parameters:
+      - description: profile id
+        in: path
+        name: userID
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Notifications mode off
+      tags:
+      - notifications
+    patch:
+      consumes:
+      - application/json
+      description: change username for user with notifications mode on
+      parameters:
+      - description: 'user information: id and telegram username'
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Change username
+      tags:
+      - notifications
+    post:
+      consumes:
+      - application/json
+      description: turn on notifications for selected user
+      parameters:
+      - description: 'user information: id and telegram username'
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Notifications mode on
+      tags:
+      - notifications
+swagger: "2.0"
