@@ -2,11 +2,11 @@ package api
 
 import (
 	"context"
-	httpSwagger "github.com/swaggo/http-swagger"
 	"log"
 	"net/http"
 	"time"
 
+	httpSwagger "github.com/swaggo/http-swagger"
 	"github.com/uptrace/bunrouter"
 
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/config"
