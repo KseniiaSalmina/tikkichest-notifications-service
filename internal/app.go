@@ -11,16 +11,16 @@ import (
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/api"
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/config"
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/notifier"
+	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/receiver/kafka"
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/sender/telegram"
 	postgresql "github.com/KseniiaSalmina/tikkichest-notifications-service/internal/storage/postgres"
-	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/updater/kafka"
 )
 
 type Application struct {
 	cfg          config.Application
 	db           *postgresql.DB
 	sender       *telegram.Bot
-	updater      *kafka.ConsumerManager
+	receiver     *kafka.ConsumerManager
 	notifier     *notifier.Notifier
 	server       *api.Server
 	closeCtx     context.Context
@@ -49,7 +49,7 @@ func (a *Application) bootstrap() error {
 
 	//init services
 	a.initSender()
-	if err := a.initUpdater(); err != nil {
+	if err := a.initReceiver(); err != nil {
 		return fmt.Errorf("failed to bootstrap application: %w", err)
 	}
 
@@ -79,18 +79,18 @@ func (a *Application) initSender() {
 	a.sender = telegram.NewBot(a.cfg.Telegram)
 }
 
-func (a *Application) initUpdater() error {
-	updater, err := kafka.NewConsumerManager(a.cfg.Kafka)
+func (a *Application) initReceiver() error {
+	receiver, err := kafka.NewConsumerManager(a.cfg.Kafka)
 	if err != nil {
-		return fmt.Errorf("failed to init updater: %w", err)
+		return fmt.Errorf("failed to init receiver: %w", err)
 	}
 
-	a.updater = updater
+	a.receiver = receiver
 	return nil
 }
 
 func (a *Application) initNotifier() {
-	a.notifier = notifier.NewNotifier(a.sender, a.updater, a.db)
+	a.notifier = notifier.NewNotifier(a.sender, a.receiver, a.db)
 }
 
 func (a *Application) initServer() {
@@ -118,7 +118,7 @@ func (a *Application) stop() {
 		log.Print("server closed") // TODO: logger
 	}
 
-	a.updater.Shutdown()
+	a.receiver.Shutdown()
 	a.notifier.Shutdown()
 
 	a.db.Close()

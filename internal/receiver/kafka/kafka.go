@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/IBM/sarama"
-	
+
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/config"
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/notifier"
 )
@@ -23,7 +23,7 @@ type ConsumerManager struct {
 func NewConsumerManager(cfg config.Kafka) (*ConsumerManager, error) {
 	consumer, err := sarama.NewConsumer([]string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create consumer: %w", err)
+		return nil, fmt.Errorf("failed to create consumer manager: %w", err)
 	}
 
 	return &ConsumerManager{

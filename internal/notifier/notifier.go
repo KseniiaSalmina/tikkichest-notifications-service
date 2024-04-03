@@ -16,7 +16,7 @@ type Sender interface {
 	SendNotification(username, message string) error
 }
 
-type Updater interface {
+type Receiver interface {
 	Run(ctx context.Context) ([]<-chan Notification, error)
 }
 
@@ -26,21 +26,21 @@ type Storage interface {
 
 type Notifier struct {
 	sender        Sender
-	updater       Updater
+	receiver      Receiver
 	storage       Storage
 	finishClosing *sync.WaitGroup
 }
 
-func NewNotifier(sender Sender, updater Updater, storage Storage) *Notifier {
+func NewNotifier(sender Sender, receiver Receiver, storage Storage) *Notifier {
 	return &Notifier{
-		sender:  sender,
-		updater: updater,
-		storage: storage,
+		sender:   sender,
+		receiver: receiver,
+		storage:  storage,
 	}
 }
 
 func (n *Notifier) Run(ctx context.Context) error {
-	notificationChans, err := n.updater.Run(ctx)
+	notificationChans, err := n.receiver.Run(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start notifier: %w", err)
 	}
