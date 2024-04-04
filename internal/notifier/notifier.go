@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -9,15 +10,15 @@ import (
 
 type Notification struct {
 	User    int
-	Message string
+	Message []byte
 }
 
 type Sender interface {
-	SendNotification(username, message string) error
+	SendNotification(username string, event Event) error
 }
 
 type Receiver interface {
-	Run(ctx context.Context) ([]<-chan Notification, error)
+	Run(ctx context.Context) <-chan Notification
 }
 
 type Storage interface {
@@ -39,18 +40,11 @@ func NewNotifier(sender Sender, receiver Receiver, storage Storage) *Notifier {
 	}
 }
 
-func (n *Notifier) Run(ctx context.Context) error {
-	notificationChans, err := n.receiver.Run(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start notifier: %w", err)
-	}
+func (n *Notifier) Run(ctx context.Context) {
+	notificationCh := n.receiver.Run(ctx)
 
-	for _, ch := range notificationChans {
-		go n.worker(ctx, ch)
-		n.finishClosing.Add(1)
-	}
-
-	return nil
+	go n.worker(ctx, notificationCh)
+	n.finishClosing.Add(1)
 }
 
 func (n *Notifier) worker(ctx context.Context, ch <-chan Notification) {
@@ -65,7 +59,18 @@ func (n *Notifier) worker(ctx context.Context, ch <-chan Notification) {
 				continue
 			}
 
-			if err := n.sender.SendNotification(username, notification.Message); err != nil {
+			var event Event
+			if err := json.Unmarshal(notification.Message, &event); err != nil {
+				log.Println(err) //TODO логгер
+				continue
+			}
+
+			if err := validateEvent(event); err != nil {
+				log.Println(err) //TODO логгер
+				continue
+			}
+
+			if err := n.sender.SendNotification(username, event); err != nil {
 				log.Println(err) //TODO логгер
 			}
 

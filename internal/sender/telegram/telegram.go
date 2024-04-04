@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/config"
+	"github.com/KseniiaSalmina/tikkichest-notifications-service/internal/notifier"
 )
 
 type Bot struct {
@@ -26,8 +27,8 @@ type Message struct {
 	Text     string `json:"text"`
 }
 
-func (tg *Bot) SendNotification(username, message string) error {
-	msg := Message{Username: username, Text: message}
+func (tg *Bot) SendNotification(username string, event notifier.Event) error {
+	msg := tg.messageFromEvent(username, event)
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(msg); err != nil {
@@ -39,4 +40,11 @@ func (tg *Bot) SendNotification(username, message string) error {
 	}
 
 	return nil
+}
+
+func (tg *Bot) messageFromEvent(username string, event notifier.Event) Message {
+	text := fmt.Sprintf("Your %s №%d has been %s", string(event.Object), event.ObjectID, string(event.Change))
+	return Message{
+		Username: username,
+		Text:     text}
 }

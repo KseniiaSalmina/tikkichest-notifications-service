@@ -14,109 +14,93 @@ import (
 )
 
 type ConsumerManager struct {
-	manager       sarama.Consumer
+	manager       sarama.ConsumerGroup
 	topic         string
-	consumers     []sarama.PartitionConsumer
+	consumer      Consumer
 	finishClosing *sync.WaitGroup
 }
 
+type Consumer struct {
+	messageCh chan notifier.Notification
+	closeCtx  context.Context
+}
+
+func (c *Consumer) Setup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
+	close(c.messageCh)
+	return nil
+}
+func (c *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for {
+		select {
+		case msg, ok := <-claim.Messages():
+			if !ok {
+				log.Println("message channel closed")
+				return nil
+			}
+
+			user, err := strconv.Atoi(string(msg.Key))
+			if err != nil {
+				return fmt.Errorf("failed to get profile id: %w", err)
+			}
+
+			formatMsg := notifier.Notification{
+				User:    user,
+				Message: msg.Value,
+			}
+			c.messageCh <- formatMsg
+
+			sess.MarkMessage(msg, "notifier")
+
+		case <-c.closeCtx.Done():
+			return nil
+
+		case <-sess.Context().Done():
+			return nil
+		}
+	}
+}
+
 func NewConsumerManager(cfg config.Kafka) (*ConsumerManager, error) {
-	consumer, err := sarama.NewConsumer([]string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)}, nil)
+	consumerGroup, err := sarama.NewConsumerGroup([]string{fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)}, cfg.ConsumerGroupID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer manager: %w", err)
 	}
 
 	return &ConsumerManager{
-		manager: consumer,
+		manager: consumerGroup,
 		topic:   cfg.Topic,
 	}, nil
 }
 
-func (cm *ConsumerManager) Run(ctx context.Context) ([]<-chan notifier.Notification, error) {
-	if err := cm.createConsumers(); err != nil {
-		return nil, fmt.Errorf("failed to start consumer manager: %w", err)
-	}
+func (cm *ConsumerManager) Run(ctx context.Context) <-chan notifier.Notification {
+	notifications := make(chan notifier.Notification)
 
-	messageChannels := make([]<-chan notifier.Notification, len(cm.consumers))
-	for _, consumer := range cm.consumers {
-		messageChannels = append(messageChannels, cm.startListening(ctx, consumer.Messages()))
-	}
-
-	return messageChannels, nil
-}
-
-func (cm *ConsumerManager) startListening(ctx context.Context, receive <-chan *sarama.ConsumerMessage) <-chan notifier.Notification {
-	send := make(chan notifier.Notification)
-
-	go func(send chan notifier.Notification, receive <-chan *sarama.ConsumerMessage) {
+	go func(chan<- notifier.Notification) {
 		cm.finishClosing.Add(1)
+		defer cm.finishClosing.Done()
+
 		for {
 			select {
-			case msg := <-receive:
-				user, err := strconv.Atoi(string(msg.Key))
-				if err != nil {
-					log.Println(err) //TODO логгер
-					continue
-				}
-				message := string(msg.Value)
-
-				formatMsg := notifier.Notification{
-					User:    user,
-					Message: message,
-				}
-				send <- formatMsg
-
 			case <-ctx.Done():
-				close(send)
-				cm.finishClosing.Done()
 				return
+			default:
+				if err := cm.manager.Consume(ctx, []string{cm.topic}, &Consumer{closeCtx: ctx}); err != nil {
+					log.Println(err) //TODO logger
+				}
 			}
 		}
-	}(send, receive)
+	}(notifications)
 
-	return send
+	return notifications
 }
 
-func (cm *ConsumerManager) createConsumers() error {
-	partitions, err := cm.manager.Partitions(cm.topic)
-	if err != nil {
-		return fmt.Errorf("failed to get partitions IDs: %w", err)
-	}
-
-	cm.consumers = make([]sarama.PartitionConsumer, 0, len(partitions))
-	for _, id := range partitions {
-		consumer, err := cm.newConsumer(id)
-		if err != nil {
-			return fmt.Errorf("failed to create consumer group: %w", err)
-		}
-		cm.consumers = append(cm.consumers, consumer)
-	}
-
-	return nil
-}
-
-func (cm *ConsumerManager) newConsumer(partition int32) (sarama.PartitionConsumer, error) {
-	consumer, err := cm.manager.ConsumePartition(cm.topic, partition, sarama.OffsetOldest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create partition consumer: %w", err)
-	}
-
-	return consumer, nil
-}
-
-func (cm *ConsumerManager) Shutdown() []error {
+func (cm *ConsumerManager) Shutdown() error {
+	err := cm.manager.Close()
 	cm.finishClosing.Wait()
 
-	errs := make([]error, 0, len(cm.consumers))
-	for _, consumer := range cm.consumers {
-		if err := consumer.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("closing partition consumer error: %w/n", err))
-		}
-	}
-
-	if err := cm.manager.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("closing consumer manager error: %w", err))
-	}
-
-	return errs
+	return err
 }
