@@ -17,7 +17,7 @@ type ConsumerManager struct {
 	manager       sarama.ConsumerGroup
 	topic         string
 	consumer      Consumer
-	finishClosing *sync.WaitGroup
+	finishClosing sync.WaitGroup
 }
 
 type Consumer struct {
@@ -71,15 +71,16 @@ func NewConsumerManager(cfg config.Kafka) (*ConsumerManager, error) {
 	}
 
 	return &ConsumerManager{
-		manager: consumerGroup,
-		topic:   cfg.Topic,
+		manager:       consumerGroup,
+		topic:         cfg.Topic,
+		finishClosing: sync.WaitGroup{},
 	}, nil
 }
 
 func (cm *ConsumerManager) Run(ctx context.Context) <-chan notifier.Notification {
 	notifications := make(chan notifier.Notification)
 
-	go func(chan<- notifier.Notification) {
+	go func(ch chan notifier.Notification) {
 		cm.finishClosing.Add(1)
 		defer cm.finishClosing.Done()
 
@@ -88,7 +89,7 @@ func (cm *ConsumerManager) Run(ctx context.Context) <-chan notifier.Notification
 			case <-ctx.Done():
 				return
 			default:
-				if err := cm.manager.Consume(ctx, []string{cm.topic}, &Consumer{closeCtx: ctx}); err != nil {
+				if err := cm.manager.Consume(ctx, []string{cm.topic}, &Consumer{messageCh: ch, closeCtx: ctx}); err != nil {
 					log.Println(err) //TODO logger
 				}
 			}
