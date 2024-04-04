@@ -101,11 +101,7 @@ func (a *Application) Run() {
 	defer a.stop()
 
 	a.server.Run()
-	if err := a.notifier.Run(a.closeCtx); err != nil {
-		log.Println(err) // TODO: logger
-		a.closeCtxFunc()
-		return
-	}
+	a.notifier.Run(a.closeCtx)
 
 	<-a.closeCtx.Done()
 	a.closeCtxFunc()

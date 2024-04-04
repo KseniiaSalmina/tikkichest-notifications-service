@@ -29,14 +29,15 @@ type Notifier struct {
 	sender        Sender
 	receiver      Receiver
 	storage       Storage
-	finishClosing *sync.WaitGroup
+	finishClosing sync.WaitGroup
 }
 
 func NewNotifier(sender Sender, receiver Receiver, storage Storage) *Notifier {
 	return &Notifier{
-		sender:   sender,
-		receiver: receiver,
-		storage:  storage,
+		sender:        sender,
+		receiver:      receiver,
+		storage:       storage,
+		finishClosing: sync.WaitGroup{},
 	}
 }
 
